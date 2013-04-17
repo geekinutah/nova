@@ -70,6 +70,7 @@ RESUMING = 'resuming'
 
 # possible task states during stop()
 STOPPING = 'stopping'
+STOPPING_HARD = 'stopping_hard'
 
 # possible task states during start()
 STARTING = 'starting'

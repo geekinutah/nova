@@ -899,6 +899,14 @@ class LibvirtDriver(driver.ComputeDriver):
         return self._hard_reboot(instance, network_info,
                                  block_device_info=block_device_info)
 
+    def _soft_shutdown(self, instance):
+        """Attempt to shutdown an instance gracefully"""
+        dom = self._lookup_by_name(instance["name"])
+        (state, _max_mem, _mem, _cpus, _t) = dom.info()
+        state = LIBVIRT_POWER_STATE[state]
+        if state == power_state.RUNNING:
+            dom.shutdown()
+
     def _soft_reboot(self, instance):
         """Attempt to shutdown and restart the instance gracefully.
 
@@ -989,9 +997,12 @@ class LibvirtDriver(driver.ComputeDriver):
         dom.resume()
 
     @exception.wrap_exception()
-    def power_off(self, instance):
+    def power_off(self, instance, type):
         """Power off the specified instance"""
-        self._destroy(instance)
+        if type == "HARD":
+           self._destroy(instance)
+        elif type == "SOFT":
+           self._soft_shutdown(instance)
 
     @exception.wrap_exception()
     def power_on(self, instance):

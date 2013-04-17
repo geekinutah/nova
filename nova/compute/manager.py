@@ -960,11 +960,11 @@ class ComputeManager(manager.SchedulerDependentManager):
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @reverts_task_state
     @wrap_instance_fault
-    def stop_instance(self, context, instance):
+    def stop_instance(self, context, instance, type):
         """Stopping an instance on this host.
 
         Alias for power_off_instance for compatibility"""
-        self.power_off_instance(context, instance,
+        self.power_off_instance(context, instance, type,
                                 final_state=vm_states.STOPPED)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
@@ -979,18 +979,19 @@ class ComputeManager(manager.SchedulerDependentManager):
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @reverts_task_state
     @wrap_instance_fault
-    def power_off_instance(self, context, instance,
+    def power_off_instance(self, context, instance, type,
                            final_state=vm_states.SOFT_DELETED):
         """Power off an instance on this host."""
         self._notify_about_instance_usage(context, instance, "power_off.start")
-        self.driver.power_off(instance)
+        self.driver.power_off(instance,type)
         current_power_state = self._get_power_state(context, instance)
         self._instance_update(context,
                               instance['uuid'],
                               power_state=current_power_state,
                               vm_state=final_state,
                               expected_task_state=(task_states.POWERING_OFF,
-                                                   task_states.STOPPING),
+                                                   task_states.STOPPING
+                                                   task_states.STOPPING_HARD),
                               task_state=None)
         self._notify_about_instance_usage(context, instance, "power_off.end")
 

@@ -56,6 +56,15 @@ class ServerStartStopActionController(wsgi.Controller):
         self.compute_api.stop(context, instance)
         return webob.Response(status_int=202)
 
+    @wsgi.action('os-stop-soft')
+    def _stop_server(self, req, id, body):
+        """Stop an instance."""
+        context = req.environ['nova.context']
+        instance = self._get_instance(context, id)
+        LOG.debug(_('stop instance softly'), instance=instance)
+        self.compute_api.stop(context, instance, "SOFT")
+        return webob.Response(status_int=202)
+
 
 class Server_start_stop(extensions.ExtensionDescriptor):
     """Start/Stop instance compute API support"""

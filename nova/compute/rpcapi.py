@@ -486,11 +486,11 @@ class ComputeAPI(nova.openstack.common.rpc.proxy.RpcProxy):
                 instance=instance_p),
                 topic=_compute_topic(self.topic, ctxt, None, instance))
 
-    def stop_instance(self, ctxt, instance, cast=True):
+    def stop_instance(self, ctxt, instance, type, cast=True):
         rpc_method = self.cast if cast else self.call
         instance_p = jsonutils.to_primitive(instance)
         return rpc_method(ctxt, self.make_msg('stop_instance',
-                instance=instance_p),
+                instance=instance_p, type=type),
                 topic=_compute_topic(self.topic, ctxt, None, instance))
 
     def suspend_instance(self, ctxt, instance):

@@ -1043,16 +1043,21 @@ class API(base.Base):
     @check_instance_state(vm_state=[vm_states.ACTIVE, vm_states.RESCUED,
                                     vm_states.ERROR, vm_states.STOPPED],
                           task_state=[None])
-    def stop(self, context, instance, do_cast=True):
+    def stop(self, context, instance, type='HARD', do_cast=True):
         """Stop an instance."""
         LOG.debug(_("Going to try to stop instance"), instance=instance)
+        LOG.debug(_("Stop type is %s" % type))
+
+        state = {'SOFT': task_states.STOPPING,
+                 'HARD': task_states.STOPPING_HARD}[type]
 
         instance = self.update(context, instance,
-                    task_state=task_states.STOPPING,
+                    task_state=state,
                     expected_task_state=None,
                     progress=0)
 
-        self.compute_rpcapi.stop_instance(context, instance, cast=do_cast)
+        self.compute_rpcapi.stop_instance(context, instance, type,
+                                          cast=do_cast)
 
     @wrap_check_policy
     @check_instance_lock
