@@ -41,6 +41,10 @@ __imagebackend_opts = [
             default=False,
             help='Create sparse logical volumes (with virtualsize)'
                  ' if this flag is set to True.'),
+    cfg.BoolOpt('libvirt_clear_lvs',
+            default=True,
+            help='Zero out logical volumes if your image backend is lvm'
+                 ' when the instance is deleted.'),
         ]
 
 FLAGS = flags.FLAGS
@@ -204,6 +208,7 @@ class Lvm(Image):
             cmd = ('dd', 'if=%s' % base, 'of=%s' % self.path, 'bs=4M')
             utils.execute(*cmd, run_as_root=True)
             if resize:
+                disk.extendpart(self.path)
                 disk.resize2fs(self.path)
 
         generated = 'ephemeral_size' in kwargs

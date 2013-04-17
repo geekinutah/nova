@@ -25,9 +25,11 @@ Includes injection of SSH PGP keys into authorized_keys file.
 
 """
 
+import contextlib
 import os
 import random
 import tempfile
+import re
 
 if os.name != 'nt':
     import crypt
@@ -41,6 +43,7 @@ from nova import utils
 from nova.virt.disk import guestfs
 from nova.virt.disk import loop
 from nova.virt.disk import nbd
+from nova.virt.disk import lvm
 from nova.virt import images
 
 
@@ -51,7 +54,7 @@ disk_opts = [
                default='$pybasedir/nova/virt/interfaces.template',
                help='Template file for injected network'),
     cfg.ListOpt('img_handlers',
-                default=['loop', 'nbd', 'guestfs'],
+                default=['loop', 'lvm', 'nbd', 'guestfs'],
                 help='Order of methods used to mount disk images'),
 
     # NOTE(yamahata): ListOpt won't work because the command may include a
@@ -101,8 +104,104 @@ def mkfs(os_type, fs_label, target):
 
 
 def resize2fs(image, check_exit_code=False):
-    utils.execute('e2fsck', '-fp', image, check_exit_code=check_exit_code)
-    utils.execute('resize2fs', image, check_exit_code=check_exit_code)
+    partitions = []
+    fs_paths = []
+    with parted_cleanup(image):
+        (parted, err) = utils.execute('parted', '-m', image, 'print',
+                run_as_root=True)
+
+        reg = re.compile('.*?\n\/dev\/.*?:\w+:\d+:\d+:\w+:.*?;\n', re.MULTILINE)
+    if (reg.match(parted)):
+        mapper_name = os.path.basename(image).split('-')
+        regex = re.compile('\n(\d):\w+:\w+:\w+:(.*?):.*?:.*?;', re.MULTILINE)
+        partitions = regex.findall(parted)
+
+    for partition in partitions:
+        part_number = partition[0]
+        fstype = partition[1]
+        fsregex = re.compile('ext\d')
+        map_path = '/dev/mapper/%s-%s--%s%s' % (
+                os.path.join(FLAGS.libvirt_images_volume_group),
+                mapper_name[0], mapper_name[1], part_number)
+
+        if fsregex.match(fstype):
+            fs_paths.append(map_path)
+
+    for path in fs_paths:
+        utils.execute('kpartx', '-s', '-a', image, run_as_root=True,
+                check_exit_code=True)
+        (out, err) = utils.execute('e2fsck', '-fp', map_path, run_as_root=True,
+                check_exit_code=False)
+
+        if err:
+            msg = 'fsck encountered an error that requires manual intervention'
+            raise exception.ProcessExecutionError('', msg)
+
+        (out, err) = utils.execute('resize2fs', map_path,
+                run_as_root=True, check_exit_code=False)
+        # NOTE(pmathews): resize2fs is kind enough to throw version info to
+        #                 stderr so we must scan stderr for specific strings
+
+        reg = re.compile('^resize2fs.*\\d\\)\n$', re.MULTILINE)
+        if not (reg.match(err)):
+            msg = 'encountered an error while resizing partition'
+            raise exception.ProcessExecutionError('', msg)
+
+        utils.execute('kpartx', '-d', '-s', image, run_as_root=True,
+                check_exit_code=True)
+
+
+@contextlib.contextmanager
+def parted_cleanup(image):
+    try:
+        yield
+    finally:
+        mapper_name = os.path.basename(image).split('-')
+        map = '%s-%s--%s' % (os.path.join(FLAGS.libvirt_images_volume_group), mapper_name[0], mapper_name[1])
+        dms = utils.execute('dmsetup', 'ls', run_as_root=True)
+        partitions = re.findall(r"" + map + "(p\d)", dms[0])
+        for partition in partitions:
+            mapper_part = "/dev/mapper/" + map + partition
+            if os.path.exists(mapper_part):
+                utils.execute('dmsetup', 'remove', mapper_part, run_as_root=True)
+
+
+def extendpart(image, check_exit_code=False):
+    # NOTE(bh_ejacobs): No point in running resize2fs when the underlying
+    #                   partition is still small (say, when installing from
+    #                   an image).
+
+    listofparts, _err = utils.execute('parted', '-ms', '--', image, 'unit',
+                                                's', 'print', run_as_root=True)
+    matchparts = re.compile("^(\d:.*$)", re.M)
+    parts = []
+    for line in listofparts.split(';'):
+        possible_match = re.search(matchparts, line)
+        if possible_match != None:
+            parts.append(possible_match.group(1))
+
+    if len(parts) < 1:
+        # Nothing to do here, move along
+        return
+
+    end_part = parts[-1]
+    part_stats = end_part.split(':')
+
+    LOG.debug("ExtendPart: parted_id is %s" % part_stats[0])
+    LOG.debug("ExtendPart: start_sector is %s" % part_stats[1])
+    LOG.debug("ExtendPart: type is %s" % part_stats[4])
+
+    if(part_stats[4][:3] != "ext"):
+        msg = "Type %s is not a Linux partition. Done " % part_stats[4]
+        LOG.debug(msg)
+        return
+
+    utils.execute('parted', '-ms', '--', image, 'rm', part_stats[0],
+                     run_as_root=True)
+
+    with parted_cleanup(image):
+        utils.execute('parted', '-ms', '--', image, 'mkpart', 'primary',
+                          part_stats[1], '-1s', run_as_root=True)
 
 
 def get_disk_size(path):
@@ -194,6 +293,10 @@ class _DiskImage(object):
         if use_cow and 'loop' in self.handlers:
             self.handlers.remove('loop')
 
+        # The LVM mounter should only be used if we use the lvm image backend.
+        if FLAGS.libvirt_images_type != 'lvm' and 'lvm' in self.handlers:
+            self.handlers.remove('lvm')
+
         if not self.handlers:
             msg = _('no capable image handler configured')
             raise exception.NovaException(msg)
@@ -236,7 +339,7 @@ class _DiskImage(object):
     @staticmethod
     def _handler_class(mode=None, device=None):
         """Look up the appropriate class to use based on MODE or DEVICE."""
-        for cls in (loop.Mount, nbd.Mount, guestfs.Mount):
+        for cls in (loop.Mount, lvm.Mount, nbd.Mount, guestfs.Mount):
             if mode and cls.mode == mode:
                 return cls
             elif device and cls.device_id_string in device:
@@ -265,6 +368,7 @@ class _DiskImage(object):
                 mounter = mounter_cls(image=self.image,
                                       partition=self.partition,
                                       mount_dir=self.mount_dir)
+                LOG.debug("image: %s, partition: %s, mount_dir: %s, handlers: %s" % (self.image, self.partition, self.mount_dir, self.handlers))
                 if mounter.do_mount():
                     self._mounter = mounter
                     break

@@ -192,8 +192,9 @@ def clear_logical_volume(path):
 def remove_logical_volumes(*paths):
     """Remove one or more logical volume."""
 
-    for path in paths:
-        clear_logical_volume(path)
+    if FLAGS.libvirt_clear_lvs == True:
+        for path in paths:
+            clear_logical_volume(path)
 
     if paths:
         lvremove = ('lvremove', '-f') + paths

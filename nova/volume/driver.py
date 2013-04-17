@@ -150,6 +150,14 @@ class VolumeDriver(object):
         # TODO(ja): reclaiming space should be done lazy and low priority
         self._copy_volume('/dev/zero', self.local_path(volume), size_in_g)
         dev_path = self.local_path(volume)
+
+        # Get rid of partiton DMs, if they exist.
+        for partition in range(1, 5):
+            mapper_part = dev_path + "p" + str(partition)
+            if os.path.exists(mapper_part):
+                self._try_execute('dmsetup', 'remove', '-f', mapper_part, 
+                                                              run_as_root=True)
+
         if os.path.exists(dev_path):
             self._try_execute('dmsetup', 'remove', '-f', dev_path,
                               run_as_root=True)
