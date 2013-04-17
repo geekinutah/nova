@@ -35,7 +35,9 @@ FLAGS = flags.FLAGS
 LOG = logging.getLogger(__name__)
 
 _ENGINE = None
+_RO_ENGINE = None
 _MAKER = None
+_RO_MAKER = None
 
 
 def get_session(autocommit=True, expire_on_commit=False):
@@ -51,6 +53,21 @@ def get_session(autocommit=True, expire_on_commit=False):
     session.flush = nova.exception.wrap_db_error(session.flush)
     return session
 
+def get_ro_session(autocommit=True, expire_on_commit=False):
+    """Return a READ ONLY SQLAlchemy session."""
+    global _RO_MAKER
+
+    if FLAGS.sql_ro_connection == 'disabled':
+        return None
+
+    if _RO_MAKER is None:
+        engine = get_ro_engine()
+        _RO_MAKER = get_maker(engine, autocommit, expire_on_commit)
+
+    session = _RO_MAKER()
+    session.query = nova.exception.wrap_db_error(session.query)
+    session.flush = nova.exception.wrap_db_error(session.flush)
+    return session
 
 def synchronous_switch_listener(dbapi_conn, connection_rec):
     """Switch sqlite connections to non-synchronous mode"""
@@ -160,6 +177,70 @@ def get_engine():
                         raise
     return _ENGINE
 
+def get_ro_engine():
+    """Return an SQLAlchemy engine."""
+    global _RO_ENGINE
+    if _RO_ENGINE is None:
+        connection_dict = sqlalchemy.engine.url.make_url(FLAGS.sql_ro_connection)
+
+        engine_args = {
+            "pool_recycle": FLAGS.sql_idle_timeout,
+            "echo": False,
+            'convert_unicode': True,
+        }
+
+        # Map our SQL debug level to SQLAlchemy's options
+        if FLAGS.sql_connection_debug >= 100:
+            engine_args['echo'] = 'debug'
+        elif FLAGS.sql_connection_debug >= 50:
+            engine_args['echo'] = True
+
+        if "sqlite" in connection_dict.drivername:
+            engine_args["poolclass"] = NullPool
+
+            if FLAGS.sql_ro_connection == "sqlite://":
+                engine_args["poolclass"] = StaticPool
+                engine_args["connect_args"] = {'check_same_thread': False}
+
+        _RO_ENGINE = sqlalchemy.create_engine(FLAGS.sql_ro_connection, **engine_args)
+
+        if 'mysql' in connection_dict.drivername:
+            sqlalchemy.event.listen(_RO_ENGINE, 'checkout', ping_listener)
+        elif "sqlite" in connection_dict.drivername:
+            if not FLAGS.sqlite_synchronous:
+                sqlalchemy.event.listen(_RO_ENGINE, 'connect',
+                                        synchronous_switch_listener)
+            sqlalchemy.event.listen(_RO_ENGINE, 'connect', add_regexp_listener)
+
+        if (FLAGS.sql_connection_trace and
+                _RO_ENGINE.dialect.dbapi.__name__ == 'MySQLdb'):
+            import MySQLdb.cursors
+            _do_query = debug_mysql_do_query()
+            setattr(MySQLdb.cursors.BaseCursor, '_do_query', _do_query)
+
+        try:
+            _RO_ENGINE.connect()
+        except OperationalError, e:
+            if not is_db_connection_error(e.args[0]):
+                raise
+
+            remaining = FLAGS.sql_max_retries
+            if remaining == -1:
+                remaining = 'infinite'
+            while True:
+                msg = _('SQL connection failed. %s attempts left.')
+                LOG.warn(msg % remaining)
+                if remaining != 'infinite':
+                    remaining -= 1
+                time.sleep(FLAGS.sql_retry_interval)
+                try:
+                    _RO_ENGINE.connect()
+                    break
+                except OperationalError, e:
+                    if (remaining != 'infinite' and remaining == 0) or \
+                       not is_db_connection_error(e.args[0]):
+                        raise
+    return _RO_ENGINE
 
 def get_maker(engine, autocommit=True, expire_on_commit=False):
     """Return a SQLAlchemy sessionmaker using the given engine."""

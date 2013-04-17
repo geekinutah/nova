@@ -133,7 +133,7 @@ class ImageCacheManager(object):
         self.image_popularity = {}
         self.instance_names = set()
 
-        instances = db.instance_get_all(context)
+        instances = db.instance_ro_get_all(context)
         for instance in instances:
             self.instance_names.add(instance['name'])
 

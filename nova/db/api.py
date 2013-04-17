@@ -122,6 +122,9 @@ def service_get(context, service_id):
     """Get a service or raise if it does not exist."""
     return IMPL.service_get(context, service_id)
 
+def service_ro_get(context, service_id):
+    """Get a service or raise if it does not exist."""
+    return IMPL.service_ro_get(context, service_id)
 
 def service_get_by_host_and_topic(context, host, topic):
     """Get a service by host it's on and topic it listens to."""
@@ -146,6 +149,10 @@ def service_get_all_by_host(context, host):
 def service_get_all_compute_by_host(context, host):
     """Get all compute services for a given host."""
     return IMPL.service_get_all_compute_by_host(context, host)
+
+def service_ro_get_all_compute_by_host(context, host):
+    """Get all compute services for a given host."""
+    return IMPL.service_ro_get_all_compute_by_host(context, host)
 
 
 def service_get_all_compute_sorted(context):
@@ -588,9 +595,19 @@ def instance_get_by_uuid(context, uuid):
     return IMPL.instance_get_by_uuid(context, uuid)
 
 
+def instance_ro_get_by_uuid(context, uuid):
+    """Get an instance or raise if it does not exist."""
+    return IMPL.instance_ro_get_by_uuid(context, uuid)
+
+
 def instance_get(context, instance_id):
     """Get an instance or raise if it does not exist."""
     return IMPL.instance_get(context, instance_id)
+
+
+def instance_ro_get(context, instance_id):
+    """Get an instance or raise if it does not exist."""
+    return IMPL.instance_ro_get(context, instance_id)
 
 
 def instance_get_all(context, columns_to_join=None):
@@ -598,10 +615,23 @@ def instance_get_all(context, columns_to_join=None):
     return IMPL.instance_get_all(context, columns_to_join=columns_to_join)
 
 
+def instance_ro_get_all(context, columns_to_join=None):
+    """Get all instances."""
+    return IMPL.instance_ro_get_all(context, columns_to_join=columns_to_join)
+
+
 def instance_get_all_by_filters(context, filters, sort_key='created_at',
                                 sort_dir='desc', limit=None, marker=None):
     """Get all instances that match all filters."""
     return IMPL.instance_get_all_by_filters(context, filters, sort_key,
+                                            sort_dir, limit=limit,
+                                            marker=marker)
+
+
+def instance_ro_get_all_by_filters(context, filters, sort_key='created_at',
+                                sort_dir='desc', limit=None, marker=None):
+    """Get all instances that match all filters."""
+    return IMPL.instance_ro_get_all_by_filters(context, filters, sort_key,
                                             sort_dir, limit=limit,
                                             marker=marker)
 
@@ -636,6 +666,11 @@ def instance_get_all_by_project(context, project_id):
 def instance_get_all_by_host(context, host):
     """Get all instances belonging to a host."""
     return IMPL.instance_get_all_by_host(context, host)
+
+
+def instance_ro_get_all_by_host(context, host):
+    """Get all instances belonging to a host."""
+    return IMPL.instance_ro_get_all_by_host(context, host)
 
 
 def instance_get_all_by_host_and_not_type(context, host, type_id=None):
@@ -1234,6 +1269,12 @@ def block_device_mapping_update_or_create(context, values):
 def block_device_mapping_get_all_by_instance(context, instance_uuid):
     """Get all block device mapping belonging to an instance"""
     return IMPL.block_device_mapping_get_all_by_instance(context,
+                                                         instance_uuid)
+
+
+def block_device_mapping_ro_get_all_by_instance(context, instance_uuid):
+    """Get all block device mapping belonging to an instance"""
+    return IMPL.block_device_mapping_ro_get_all_by_instance(context,
                                                          instance_uuid)
 
 
@@ -1860,6 +1901,11 @@ def instance_fault_create(context, values):
 def instance_fault_get_by_instance_uuids(context, instance_uuids):
     """Get all instance faults for the provided instance_uuids."""
     return IMPL.instance_fault_get_by_instance_uuids(context, instance_uuids)
+
+
+def instance_fault_ro_get_by_instance_uuids(context, instance_uuids):
+    """Get all instance faults for the provided instance_uuids."""
+    return IMPL.instance_fault_ro_get_by_instance_uuids(context, instance_uuids)
 
 
 ####################

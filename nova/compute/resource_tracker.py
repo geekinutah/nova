@@ -403,7 +403,7 @@ class ResourceTracker(object):
         self._purge_expired_claims()
 
         # Grab all instances assigned to this host:
-        instances = db.instance_get_all_by_host(context, self.host)
+        instances = db.instance_ro_get_all_by_host(context, self.host)
 
         # Now calculate usage based on instance utilization:
         self._update_usage_from_instances(resources, instances)
@@ -454,7 +454,7 @@ class ResourceTracker(object):
 
     def _get_service(self, context):
         try:
-            return db.service_get_all_compute_by_host(context,
+            return db.service_ro_get_all_compute_by_host(context,
                     self.host)[0]
         except exception.NotFound:
             LOG.warn(_("No service record for host %s"), self.host)

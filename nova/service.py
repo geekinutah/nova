@@ -534,7 +534,8 @@ class Service(object):
         state_catalog = {}
         try:
             try:
-                service_ref = db.service_get(ctxt, self.service_id)
+                service_ref = db.service_ro_get(ctxt, self.service_id)
+
             except exception.NotFound:
                 LOG.debug(_('The service database object disappeared, '
                             'Recreating it.'))

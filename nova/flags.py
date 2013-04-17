@@ -82,6 +82,10 @@ core_opts = [
                default='sqlite:///$state_path/$sqlite_db',
                help='The SQLAlchemy connection string used to connect to the '
                     'database'),
+    cfg.StrOpt('sql_ro_connection',
+               default='disabled',
+               help='The SQLAlchemy connection string used to connect to the '
+                    'read-only database'),
     cfg.StrOpt('api_paste_config',
                default="api-paste.ini",
                help='File name for the paste.deploy config for nova-api'),

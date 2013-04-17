@@ -31,6 +31,7 @@ from nova.compute import vm_states
 from nova import db
 from nova.db.sqlalchemy import models
 from nova.db.sqlalchemy.session import get_session
+from nova.db.sqlalchemy.session import get_ro_session
 from nova import exception
 from nova import flags
 from nova.openstack.common import log as logging
@@ -347,6 +348,12 @@ def service_get(context, service_id, session=None):
 
     return result
 
+@require_admin_context
+def service_ro_get(context, service_id, session=None):
+    if session is None:
+        session = get_ro_session()
+    return service_get(context, service_id, session)
+
 
 @require_admin_context
 def service_get_all(context, disabled=None):
@@ -383,8 +390,9 @@ def service_get_all_by_host(context, host):
 
 
 @require_admin_context
-def service_get_all_compute_by_host(context, host):
-    result = model_query(context, models.Service, read_deleted="no").\
+def service_get_all_compute_by_host(context, host, session=None):
+    result = model_query(context, models.Service, session=session,
+                read_deleted="no").\
                 options(joinedload('compute_node')).\
                 filter_by(host=host).\
                 filter_by(topic="compute").\
@@ -394,6 +402,13 @@ def service_get_all_compute_by_host(context, host):
         raise exception.ComputeHostNotFound(host=host)
 
     return result
+
+@require_admin_context
+def service_ro_get_all_compute_by_host(context, host, session=None):
+    if session is None:
+        session = get_ro_session()
+
+    return service_get_all_compute_by_host(context, host, session)
 
 
 @require_admin_context
@@ -1533,6 +1548,14 @@ def instance_get_by_uuid(context, uuid, session=None):
 
 
 @require_context
+def instance_ro_get_by_uuid(context, uuid, session=None):
+    if session is None:
+        session = get_ro_session()
+
+    return instance_get_by_uuid(context, uuid, session)
+
+
+@require_context
 def instance_get(context, instance_id, session=None):
     result = _build_instance_get(context, session=session).\
                 filter_by(id=instance_id).\
@@ -1542,6 +1565,13 @@ def instance_get(context, instance_id, session=None):
         raise exception.InstanceNotFound(instance_id=instance_id)
 
     return result
+
+
+@require_context
+def instance_ro_get(context, instance_id, session=None):
+    if session is None:
+        session = get_ro_session()
+    return instance_get(context, instance_id, session)
 
 
 @require_context
@@ -1555,26 +1585,33 @@ def _build_instance_get(context, session=None):
 
 
 @require_admin_context
-def instance_get_all(context, columns_to_join=None):
+def instance_get_all(context, columns_to_join=None, session=None):
     if columns_to_join is None:
         columns_to_join = ['info_cache', 'security_groups',
                            'metadata', 'instance_type']
-    query = model_query(context, models.Instance)
+    query = model_query(context, models.Instance, session=session)
     for column in columns_to_join:
         query = query.options(joinedload(column))
     return query.all()
 
 
+@require_admin_context
+def instance_ro_get_all(context, columns_to_join=None):
+    return instance_get_all(context, columns_to_join, get_ro_session())
+
+
 @require_context
 def instance_get_all_by_filters(context, filters, sort_key, sort_dir,
-                                limit=None, marker=None):
+                                limit=None, marker=None, session=None):
     """Return instances that match all filters.  Deleted instances
     will be returned by default, unless there's a filter that says
     otherwise"""
 
     sort_fn = {'desc': desc, 'asc': asc}
 
-    session = get_session()
+    if session is None:
+        session = get_session()
+
     query_prefix = session.query(models.Instance).\
             options(joinedload('info_cache')).\
             options(joinedload('security_groups')).\
@@ -1635,6 +1672,12 @@ def instance_get_all_by_filters(context, filters, sort_key, sort_dir,
 
     instances = query_prefix.all()
     return instances
+
+
+def instance_ro_get_all_by_filters(context, filters, sort_key, sort_dir,
+                                limit=None, marker=None, session=None):
+    return instance_get_all_by_filters(context, filters, sort_key, sort_dir,
+                                limit, marker, get_ro_session())
 
 
 def regex_filter(query, model, filters):
@@ -1710,8 +1753,8 @@ def instance_get_active_by_window_joined(context, begin, end=None,
 
 
 @require_admin_context
-def _instance_get_all_query(context, project_only=False):
-    return model_query(context, models.Instance, project_only=project_only).\
+def _instance_get_all_query(context, project_only=False, session=None):
+    return model_query(context, models.Instance, project_only=project_only, session=session).\
                    options(joinedload('info_cache')).\
                    options(joinedload('security_groups')).\
                    options(joinedload('metadata')).\
@@ -1721,6 +1764,11 @@ def _instance_get_all_query(context, project_only=False):
 @require_admin_context
 def instance_get_all_by_host(context, host):
     return _instance_get_all_query(context).filter_by(host=host).all()
+
+
+@require_admin_context
+def instance_ro_get_all_by_host(context, host):
+    return _instance_get_all_query(context, session=get_ro_session()).filter_by(host=host).all()
 
 
 @require_admin_context
@@ -3389,6 +3437,13 @@ def block_device_mapping_update_or_create(context, values):
 @require_context
 def block_device_mapping_get_all_by_instance(context, instance_uuid):
     return _block_device_mapping_get_query(context).\
+                 filter_by(instance_uuid=instance_uuid).\
+                 all()
+
+
+@require_context
+def block_device_mapping_ro_get_all_by_instance(context, instance_uuid):
+    return _block_device_mapping_get_query(context, session=get_ro_session()).\
                  filter_by(instance_uuid=instance_uuid).\
                  all()
 
@@ -5143,9 +5198,9 @@ def instance_fault_create(context, values):
     return dict(fault_ref.iteritems())
 
 
-def instance_fault_get_by_instance_uuids(context, instance_uuids):
+def instance_fault_get_by_instance_uuids(context, instance_uuids, session=None):
     """Get all instance faults for the provided instance_uuids."""
-    rows = model_query(context, models.InstanceFault, read_deleted='no').\
+    rows = model_query(context, models.InstanceFault, read_deleted='no', session=session).\
                        filter(models.InstanceFault.instance_uuid.in_(
                            instance_uuids)).\
                        order_by(desc("created_at")).\
@@ -5160,6 +5215,13 @@ def instance_fault_get_by_instance_uuids(context, instance_uuids):
         output[row['instance_uuid']].append(data)
 
     return output
+
+
+def instance_fault_ro_get_by_instance_uuids(context, instance_uuids, session=None):
+    if session is None:
+        session = get_ro_session()
+
+    return instance_fault_get_by_instance_uuids(context, instance_uuids, session)
 
 
 ##################

@@ -933,7 +933,7 @@ class API(base.Base):
                             reservations=downsize_reservations)
 
             is_up = False
-            bdms = self.db.block_device_mapping_get_all_by_instance(
+            bdms = self.db.block_device_mapping_ro_get_all_by_instance(
                     context, instance["uuid"])
             #Note(jogo): db allows for multiple compute services per host
             try:
@@ -1086,9 +1086,9 @@ class API(base.Base):
         """Get a single instance with the given instance_id."""
         # NOTE(ameade): we still need to support integer ids for ec2
         if utils.is_uuid_like(instance_id):
-            instance = self.db.instance_get_by_uuid(context, instance_id)
+            instance = self.db.instance_ro_get_by_uuid(context, instance_id)
         else:
-            instance = self.db.instance_get(context, instance_id)
+            instance = self.db.instance_ro_get(context, instance_id)
 
         check_policy(context, 'get', instance)
 
@@ -1201,9 +1201,9 @@ class API(base.Base):
             uuids = set([r['instance_uuid'] for r in res])
             filters['uuid'] = uuids
 
-        return self.db.instance_get_all_by_filters(context, filters,
-                                                   sort_key, sort_dir,
-                                                   limit=limit, marker=marker)
+        return self.db.instance_ro_get_all_by_filters(context, filters,
+                                                      sort_key, sort_dir,
+                                                      limit=limit, marker=marker)
 
     @wrap_check_policy
     @check_instance_state(vm_state=[vm_states.ACTIVE, vm_states.STOPPED])
@@ -1949,8 +1949,8 @@ class API(base.Base):
             raise exception.InvalidVolume(reason=msg)
 
         instance_uuid = volume['instance_uuid']
-        instance = self.db.instance_get_by_uuid(context.elevated(),
-                                                instance_uuid)
+        instance = self.db.instance_ro_get_by_uuid(context.elevated(),
+                                                   instance_uuid)
         if not instance:
             raise exception.VolumeUnattached(volume_id=volume_id)
         self._detach_volume(context, instance, volume_id)
@@ -2010,7 +2010,7 @@ class API(base.Base):
             check_policy(context, 'get_instance_faults', instance)
 
         uuids = [instance['uuid'] for instance in instances]
-        return self.db.instance_fault_get_by_instance_uuids(context, uuids)
+        return self.db.instance_fault_ro_get_by_instance_uuids(context, uuids)
 
     def get_instance_bdms(self, context, instance):
         """Get all bdm tables for specified instance."""

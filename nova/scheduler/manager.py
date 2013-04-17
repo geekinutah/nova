@@ -230,8 +230,8 @@ class SchedulerManager(manager.Manager):
         # Getting compute node info and related instances info
         compute_ref = db.service_get_all_compute_by_host(context, host)
         compute_ref = compute_ref[0]
-        instance_refs = db.instance_get_all_by_host(context,
-                                                    compute_ref['host'])
+        instance_refs = db.instance_ro_get_all_by_host(context,
+                                                       compute_ref['host'])
 
         # Getting total available/used resource
         compute_ref = compute_ref['compute_node'][0]

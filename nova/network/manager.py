@@ -913,10 +913,10 @@ class NetworkManager(manager.SchedulerDependentManager):
         # thus enabling `read_deleted`
         admin_context = context.get_admin_context(read_deleted='yes')
         if utils.is_uuid_like(instance_id):
-            instance_ref = self.db.instance_get_by_uuid(admin_context,
-                                                        instance_id)
+            instance_ref = self.db.instance_ro_get_by_uuid(admin_context,
+                                                           instance_id)
         else:
-            instance_ref = self.db.instance_get(admin_context, instance_id)
+            instance_ref = self.db.instance_ro_get(admin_context, instance_id)
 
         groups = instance_ref['security_groups']
         group_ids = [group['id'] for group in groups]
