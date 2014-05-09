@@ -4113,3 +4113,33 @@ class ComputeManager(manager.SchedulerDependentManager):
                 filtered_instances.append(instance)
 
         self.driver.manage_image_cache(context, filtered_instances)
+
+
+class ComputeManagerLite(ComputeManager):
+
+    def __init__(self, compute_driver=None, *args, **kwargs):
+        """Load configuration options and connect to the hypervisor."""
+        self.virtapi = ComputeVirtAPI(self)
+        self.network_api = network.API()
+        self.volume_api = volume.API()
+        self._last_host_check = 0
+        self._last_bw_usage_poll = 0
+        self._last_vol_usage_poll = 0
+        self._last_info_cache_heal = 0
+        self.compute_api = compute.API()
+        self.compute_rpcapi = compute_rpcapi.ComputeAPI()
+        self.conductor_api = conductor.API()
+        self.is_quantum_security_groups = (
+            openstack_driver.is_quantum_security_groups())
+        self.consoleauth_rpcapi = consoleauth.rpcapi.ConsoleAuthAPI()
+        self.cells_rpcapi = cells_rpcapi.CellsAPI()
+        self._resource_tracker_dict = {}
+
+        super(ComputeManager, self).__init__(service_name="computelite",
+                                             *args, **kwargs)
+
+    def init_host(self):
+        ctxt = nova.context.get_admin_context()
+        while (rules = self._virtapi.provider_fw_rule_get_all(ctxt)):
+            LOG.debug("rules = %s" % rules)
+
